@@ -83,31 +83,103 @@
   }
   .leaflet-control-attribution a { color: var(--text-mid) !important; }
 
-  /* === ALERT BANNER === */
-  .alerts {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 250;
-    background: var(--severe); color: #fff;
-    padding: 0.7rem 1.25rem;
-    display: flex; align-items: center; gap: 0.85rem;
-    font-size: 0.88rem;
-    border-bottom: 1px solid rgba(0,0,0,0.25);
-    animation: bannerSlide 0.5s cubic-bezier(0.2, 0.65, 0.2, 1);
+  /* === ALERT CHIP (in topbar) === */
+  .alert-chip {
+    display: none;
+    align-items: center; gap: 0.5rem;
+    background: var(--surface);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--severe);
+    border-radius: 9px;
+    padding: 0.5rem 0.75rem;
+    font-family: var(--mono); font-size: 0.74rem;
+    color: var(--severe);
+    cursor: pointer;
+    transition: all 0.15s;
+    animation: chipIn 0.5s cubic-bezier(0.2, 0.65, 0.2, 1);
+    max-width: 360px;
   }
-  @keyframes bannerSlide { from { transform: translateY(-100%); } }
-  .alert-dot {
+  .alert-chip.show { display: inline-flex; }
+  @keyframes chipIn { from { opacity: 0; transform: translateY(-6px); } }
+  .alert-chip:hover {
+    background: var(--severe-glow);
+    border-color: var(--severe);
+    color: #ffb8ad;
+  }
+  .alert-chip.sev-moderate { border-color: var(--warn); color: var(--warn); }
+  .alert-chip.sev-moderate:hover { background: rgba(255, 184, 77, 0.14); color: #ffd699; }
+  .alert-chip.sev-minor { border-color: var(--accent-2); color: var(--accent-2); }
+  .alert-chip.sev-minor:hover { background: var(--accent-glow); color: var(--text); }
+  .alert-chip-dot {
     width: 7px; height: 7px; border-radius: 50%;
-    background: #fff; flex-shrink: 0;
+    background: currentColor; flex-shrink: 0;
+    box-shadow: 0 0 8px currentColor;
     animation: dotPulse 1.5s ease-in-out infinite;
   }
-  @keyframes dotPulse { 50% { opacity: 0.35; transform: scale(1.4); } }
-  .alert-event { font-weight: 600; }
-  .alert-headline { color: rgba(255,255,255,0.85); flex: 1; }
-  .alert-link {
-    color: #fff; font-size: 0.78rem;
-    border-bottom: 1px solid rgba(255,255,255,0.4);
-    padding-bottom: 1px; white-space: nowrap;
+  .alert-chip.sev-minor .alert-chip-dot { animation: none; }
+  @keyframes dotPulse { 50% { opacity: 0.4; transform: scale(1.35); } }
+  .alert-chip-text {
+    font-weight: 500; letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  body.has-alert .topbar { top: 42px; }
+  .alert-chip-count {
+    background: currentColor;
+    color: var(--bg) !important;
+    font-size: 0.62rem; font-weight: 600;
+    padding: 0.08rem 0.35rem;
+    border-radius: 4px;
+    margin-left: 0.15rem;
+    flex-shrink: 0;
+  }
+
+  /* Alerts panel inside card */
+  .alert-card {
+    margin: 0.8rem 1.1rem;
+    border-left: 3px solid var(--severe);
+    background: var(--surface-3);
+    border-radius: 0 6px 6px 0;
+    padding: 0.7rem 0.85rem;
+  }
+  .alert-card.sev-moderate { border-left-color: var(--warn); }
+  .alert-card.sev-minor { border-left-color: var(--accent-2); }
+  .alert-card-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 0.5rem; margin-bottom: 0.35rem;
+  }
+  .alert-card-event {
+    font-size: 0.9rem; color: var(--text); font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .alert-card-sev {
+    font-family: var(--mono); font-size: 0.62rem;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--severe); font-weight: 500;
+    padding: 0.12rem 0.4rem;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .alert-card.sev-moderate .alert-card-sev { color: var(--warn); }
+  .alert-card.sev-minor .alert-card-sev { color: var(--accent-2); }
+  .alert-card-headline {
+    font-size: 0.78rem; color: var(--text-mid);
+    line-height: 1.45; margin-bottom: 0.4rem;
+  }
+  .alert-card-meta {
+    font-family: var(--mono); font-size: 0.62rem;
+    color: var(--text-dim); letter-spacing: 0.02em;
+    display: flex; gap: 0.85rem; flex-wrap: wrap;
+  }
+  .alert-card-link {
+    color: var(--accent); font-size: 0.7rem; font-family: var(--mono);
+    margin-top: 0.4rem; display: inline-block;
+  }
+  .alert-empty {
+    padding: 1.5rem 1.1rem;
+    text-align: center;
+    font-family: var(--mono); font-size: 0.74rem;
+    color: var(--text-dim);
+  }
 
   /* === TOP BAR === */
   .topbar {
@@ -635,17 +707,17 @@
 <div id="map"></div>
 <canvas id="wind-canvas"></canvas>
 
-<div id="alerts-banner" class="alerts" hidden>
-  <span class="alert-dot"></span>
-  <span class="alert-event" id="alert-event">—</span>
-  <span class="alert-headline" id="alert-headline">—</span>
-  <a id="alert-link" href="#" target="_blank" rel="noopener" class="alert-link">Details ↗</a>
-</div>
-
 <div class="topbar">
-  <div class="brand">
-    <div class="brand-mark">wx</div>
-    <div class="brand-text"><strong>wx</strong>.cityblue.com</div>
+  <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+    <div class="brand">
+      <div class="brand-mark">wx</div>
+      <div class="brand-text"><strong>wx</strong>.cityblue.com</div>
+    </div>
+    <div class="alert-chip" id="alert-chip" role="button" tabindex="0" aria-label="View active weather alerts">
+      <span class="alert-chip-dot"></span>
+      <span class="alert-chip-text" id="alert-chip-text">—</span>
+      <span class="alert-chip-count" id="alert-chip-count" hidden>1</span>
+    </div>
   </div>
 
   <div class="top-right">
@@ -687,6 +759,7 @@
     <button class="tab active" data-tab="now">Now</button>
     <button class="tab" data-tab="forecast">Forecast</button>
     <button class="tab" data-tab="deep">Deep</button>
+    <button class="tab" data-tab="alerts" id="tab-alerts" style="display:none; color:var(--severe);">Alerts</button>
   </div>
 
   <div class="now-detail">
@@ -729,6 +802,10 @@
         <div class="afd" id="d-afd">Loading…</div>
         <div class="afd-foot" id="d-afd-time"></div>
       </div>
+    </div>
+
+    <div class="tab-panel" data-panel="alerts" id="panel-alerts">
+      <div class="alert-empty">No active alerts.</div>
     </div>
   </div>
 </div>
@@ -1256,16 +1333,64 @@
   }
 
   function renderAlertsTop(features) {
-    const banner = document.getElementById('alerts-banner');
-    if (!features.length) { banner.hidden = true; document.body.classList.remove('has-alert'); return; }
+    const chip = document.getElementById('alert-chip');
+    const chipText = document.getElementById('alert-chip-text');
+    const chipCount = document.getElementById('alert-chip-count');
+    const tabBtn = document.getElementById('tab-alerts');
+    const panel = document.getElementById('panel-alerts');
+
+    if (!features.length) {
+      chip.classList.remove('show', 'sev-moderate', 'sev-minor');
+      tabBtn.style.display = 'none';
+      panel.innerHTML = '<div class="alert-empty">No active alerts.</div>';
+      return;
+    }
+
     const order = { 'Extreme': 4, 'Severe': 3, 'Moderate': 2, 'Minor': 1, 'Unknown': 0 };
     features.sort((a, b) => (order[b.properties.severity] || 0) - (order[a.properties.severity] || 0));
-    const a = features[0].properties;
-    document.getElementById('alert-event').textContent = a.event || a.severity;
-    document.getElementById('alert-headline').textContent = a.headline || '';
-    document.getElementById('alert-link').href = features[0].id;
-    banner.hidden = false;
-    document.body.classList.add('has-alert');
+    const top = features[0].properties;
+    const topSev = top.severity || 'Unknown';
+    const topEvent = top.event || top.parameters?.NWSheadline?.[0] || topSev + ' weather alert';
+
+    // Chip
+    chip.classList.remove('sev-moderate', 'sev-minor');
+    if (topSev === 'Moderate') chip.classList.add('sev-moderate');
+    else if (topSev === 'Minor' || topSev === 'Unknown') chip.classList.add('sev-minor');
+    chip.classList.add('show');
+    chipText.textContent = topEvent;
+    if (features.length > 1) {
+      chipCount.textContent = features.length;
+      chipCount.hidden = false;
+    } else {
+      chipCount.hidden = true;
+    }
+
+    // Tab + panel
+    tabBtn.style.display = '';
+    tabBtn.style.color = topSev === 'Extreme' || topSev === 'Severe' ? 'var(--severe)'
+                       : topSev === 'Moderate' ? 'var(--warn)' : 'var(--accent-2)';
+    panel.innerHTML = features.map(f => {
+      const a = f.properties;
+      const sev = (a.severity || 'Unknown');
+      const sevCls = sev === 'Moderate' ? ' sev-moderate' : (sev === 'Minor' || sev === 'Unknown') ? ' sev-minor' : '';
+      const expires = a.expires ? new Date(a.expires) : (a.ends ? new Date(a.ends) : null);
+      const issued = a.sent ? new Date(a.sent) : null;
+      const area = (a.areaDesc || '').split(';').map(s => s.trim()).slice(0, 4).join(', ');
+      const headline = a.headline || a.description?.split('\n').slice(0, 3).join(' ').slice(0, 240) || '';
+      return `<div class="alert-card${sevCls}">
+        <div class="alert-card-head">
+          <div class="alert-card-event">${a.event || sev + ' weather alert'}</div>
+          <span class="alert-card-sev">${sev}</span>
+        </div>
+        ${headline ? `<div class="alert-card-headline">${headline}</div>` : ''}
+        <div class="alert-card-meta">
+          ${area ? `<span>${area}</span>` : ''}
+          ${issued ? `<span>Issued ${issued.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric', timeZone: TZ })}</span>` : ''}
+          ${expires ? `<span>Expires ${expires.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric', timeZone: TZ })}</span>` : ''}
+        </div>
+        <a href="${f.id}" target="_blank" rel="noopener" class="alert-card-link">Full text ↗</a>
+      </div>`;
+    }).join('');
   }
 
   // ===== UI WIRING =====
@@ -1305,6 +1430,17 @@
       // Auto-expand if not already
       document.getElementById('now-card').classList.add('expanded');
     });
+  });
+
+  // Alert chip → open card to alerts tab
+  document.getElementById('alert-chip').addEventListener('click', () => {
+    const tab = document.getElementById('tab-alerts');
+    if (tab.style.display === 'none') return;
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-alerts').classList.add('active');
+    document.getElementById('now-card').classList.add('expanded');
   });
 
   // Patch renderAlertGeometry to cache features
