@@ -904,7 +904,7 @@
   }
 
   // ===== STATE =====
-  let map, radarLayers = [], radarIdx = 11, playing = false, playTimer = null, holdTimer = null;
+  let map, radarLayers = [], kictLayer = null, radarIdx = 11, playing = false, playTimer = null, holdTimer = null;
   let activeMarker = null;
   let alertLayer = null, stationLayer = null;
   let windParticles = null;
@@ -1049,12 +1049,32 @@
       return layer.addTo(map);
     });
 
+    // High-resolution single-site KICT overlay. Renders only on the "now" frame.
+    // Native resolution ~250m/pixel vs ~1km for the CONUS mosaic. Covers
+    // ~145mi around Wichita; CONUS mosaic still fills in beyond.
+    kictLayer = L.tileLayer(
+      'https://{s}.agron.iastate.edu/cache/tile.py/1.0.0/ridge::KICT-N0Q-0/{z}/{x}/{y}.png',
+      {
+        subdomains: ['mesonet', 'mesonet1', 'mesonet2', 'mesonet3'],
+        tms: false,
+        opacity: 0.88,
+        pane: 'radar',
+        maxZoom: 12,
+        zIndex: 5
+      }
+    );
+    kictLayer.on('add', () => {
+      if (kictLayer._container) kictLayer._container.style.transition = 'opacity 0.18s ease';
+    });
+    kictLayer.addTo(map);
+
     map.createPane('alerts');
     map.getPane('alerts').style.zIndex = 240;
 
     updateRadarTime();
     setInterval(() => {
       radarLayers.forEach(l => l.redraw());
+      if (kictLayer) kictLayer.redraw();
       if (radarIdx === 11) updateRadarTime();
     }, 5 * 60 * 1000);
 
@@ -1084,9 +1104,11 @@
     if (i === radarIdx) return;
     const old = radarIdx;
     radarIdx = i;
-    // Crossfade: fade in new before fully fading out old
-    radarLayers[i].setOpacity(0.72);
+    // Crossfade: fade in new before fully fading out old — but only if radar layer is on
+    if (layerState.radar) radarLayers[i].setOpacity(0.72);
     setTimeout(() => radarLayers[old].setOpacity(0), 120);
+    // High-res KICT overlay only on the "now" frame
+    if (kictLayer) kictLayer.setOpacity(layerState.radar && i === 11 ? 0.88 : 0);
     document.getElementById('scrubber').value = i;
     updateRadarTime();
   }
@@ -1406,6 +1428,7 @@
         else windParticles.stop();
       } else if (layer === 'radar') {
         radarLayers.forEach((l, i) => l.setOpacity(layerState.radar && i === radarIdx ? 0.72 : 0));
+        if (kictLayer) kictLayer.setOpacity(layerState.radar && radarIdx === 11 ? 0.88 : 0);
       } else if (layer === 'alerts') {
         renderAlertGeometry(window._currentAlerts || []);
       } else if (layer === 'stations') {
