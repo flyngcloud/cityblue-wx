@@ -948,7 +948,7 @@
   }
 
   // ===== STATE =====
-  let map, radarLayers = [], kictLayer = null, radarIdx = 11, playing = false, playTimer = null, holdTimer = null;
+  let map, radarLayers = [], radarIdx = 11, playing = false, playTimer = null, holdTimer = null;
   let radarOpacity = 0.72;
   let radarFadeTimer = null;
   let activeMarker = null;
@@ -1095,32 +1095,12 @@
       return layer.addTo(map);
     });
 
-    // High-resolution single-site KICT overlay. Renders only on the "now" frame.
-    // Native resolution ~250m/pixel vs ~1km for the CONUS mosaic. Covers
-    // ~145mi around Wichita; CONUS mosaic still fills in beyond.
-    kictLayer = L.tileLayer(
-      'https://{s}.agron.iastate.edu/cache/tile.py/1.0.0/ridge::KICT-N0Q-0/{z}/{x}/{y}.png',
-      {
-        subdomains: ['mesonet', 'mesonet1', 'mesonet2', 'mesonet3'],
-        tms: false,
-        opacity: 0.88,
-        pane: 'radar',
-        maxZoom: 12,
-        zIndex: 5
-      }
-    );
-    kictLayer.on('add', () => {
-      if (kictLayer._container) kictLayer._container.style.transition = 'opacity 0.18s ease';
-    });
-    kictLayer.addTo(map);
-
     map.createPane('alerts');
     map.getPane('alerts').style.zIndex = 240;
 
     updateRadarTime();
     setInterval(() => {
       radarLayers.forEach(l => l.redraw());
-      if (kictLayer) kictLayer.redraw();
       if (radarIdx === 11) updateRadarTime();
     }, 5 * 60 * 1000);
 
@@ -1157,7 +1137,6 @@
 
     if (!layerState.radar) {
       radarLayers.forEach(l => l.setOpacity(0));
-      if (kictLayer) kictLayer.setOpacity(0);
       return;
     }
 
@@ -1176,11 +1155,6 @@
     } else {
       // Snap-paint: ensure only current is visible
       radarLayers.forEach((l, i) => { if (i !== radarIdx) l.setOpacity(0); });
-    }
-
-    // High-res KICT overlay: only on the "now" frame, scaled with main opacity
-    if (kictLayer) {
-      kictLayer.setOpacity(radarIdx === 11 ? Math.min(1, radarOpacity + 0.16) : 0);
     }
   }
 
