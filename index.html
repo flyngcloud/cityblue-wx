@@ -951,6 +951,7 @@
   let map, radarLayers = [], radarIdx = 11, playing = false, playTimer = null, holdTimer = null;
   let radarOpacity = 0.72;
   let radarFadeTimer = null;
+  let ictLayer = null;
   let activeMarker = null;
   let alertLayer = null, stationLayer = null;
   let windParticles = null;
@@ -1095,12 +1096,33 @@
       return layer.addTo(map);
     });
 
+    // High-resolution single-site ICT (Wichita NEXRAD) overlay above the
+    // CONUS mosaic. Native ~250m/pixel vs ~1km mosaic. Renders only on the
+    // 'now' frame (radarIdx === 11). Opacity controlled exclusively by
+    // paintRadar() — single source of truth.
+    ictLayer = L.tileLayer(
+      'https://{s}.agron.iastate.edu/cache/tile.py/1.0.0/ridge::ICT-N0B-0/{z}/{x}/{y}.png',
+      {
+        subdomains: ['mesonet', 'mesonet1', 'mesonet2', 'mesonet3'],
+        pane: 'radar',
+        zIndex: 6,
+        maxZoom: 12,
+        opacity: 0,
+        attribution: ''
+      }
+    );
+    ictLayer.on('add', () => {
+      if (ictLayer._container) ictLayer._container.style.transition = 'opacity 0.18s ease';
+    });
+    ictLayer.addTo(map);
+
     map.createPane('alerts');
     map.getPane('alerts').style.zIndex = 240;
 
     updateRadarTime();
     setInterval(() => {
       radarLayers.forEach(l => l.redraw());
+      if (ictLayer) ictLayer.redraw();
       if (radarIdx === 11) updateRadarTime();
     }, 5 * 60 * 1000);
 
@@ -1137,24 +1159,29 @@
 
     if (!layerState.radar) {
       radarLayers.forEach(l => l.setOpacity(0));
+      if (ictLayer) ictLayer.setOpacity(0);
       return;
     }
 
     // Radar ON
     radarLayers[radarIdx].setOpacity(radarOpacity);
+    if (ictLayer) ictLayer.setOpacity(radarIdx === 11 ? radarOpacity : 0);
     if (crossfadeFrom != null && crossfadeFrom !== radarIdx) {
       // Brief overlap, then fade out everything except current
       radarFadeTimer = setTimeout(() => {
         radarFadeTimer = null;
         if (!layerState.radar) {
           radarLayers.forEach(l => l.setOpacity(0));
+          if (ictLayer) ictLayer.setOpacity(0);
           return;
         }
         radarLayers.forEach((l, i) => { if (i !== radarIdx) l.setOpacity(0); });
+        if (ictLayer) ictLayer.setOpacity(radarIdx === 11 ? radarOpacity : 0);
       }, 120);
     } else {
       // Snap-paint: ensure only current is visible
       radarLayers.forEach((l, i) => { if (i !== radarIdx) l.setOpacity(0); });
+      if (ictLayer) ictLayer.setOpacity(radarIdx === 11 ? radarOpacity : 0);
     }
   }
 
