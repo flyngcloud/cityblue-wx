@@ -736,6 +736,14 @@
     .now-temp { font-size: 2.9rem; }
     .now-icon { width: 46px; height: 46px; }
   }
+
+  /* Radar tile smoothing — bilinear scaling on the radar pane.
+     Overrides Leaflet's default image-rendering: -webkit-optimize-contrast
+     (nearest-neighbor) which gives pixelated edges at zoom on the
+     mosaic frames and the ICT-N0B single-site overlay. */
+  .leaflet-radar-pane .leaflet-tile {
+    image-rendering: auto;
+  }
 </style>
 </head>
 <body class="loading">
