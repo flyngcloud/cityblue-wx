@@ -575,6 +575,43 @@
   }
   .play-btn svg { width: 11px; height: 11px; }
 
+  .source-picker {
+    display: flex;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    overflow: hidden;
+    height: 32px;
+    flex-shrink: 0;
+  }
+  .source-btn {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 0 9px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    display: flex; align-items: center;
+  }
+  .source-btn:not(:last-child) { border-right: 1px solid var(--border-strong); }
+  .source-btn:hover { color: var(--accent); }
+  .source-btn.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .source-btn.error {
+    background: var(--severe);
+    color: var(--bg);
+    animation: source-err 0.4s ease;
+  }
+  @keyframes source-err {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
   .scrubber {
     flex: 1; appearance: none; -webkit-appearance: none;
     background: transparent; height: 24px;
@@ -855,6 +892,10 @@
 </div>
 
 <div class="timeline">
+  <div class="source-picker" role="tablist" aria-label="Radar source">
+    <button class="source-btn active" data-source="iem" role="tab" aria-selected="true">IEM</button>
+    <button class="source-btn" data-source="rv" role="tab" aria-selected="false">RV</button>
+  </div>
   <button class="play-btn" id="play-btn" aria-label="Play or pause radar">
     <svg viewBox="0 0 12 12" fill="currentColor" id="play-icon"><path d="M3 2 L10 6 L3 10 Z"/></svg>
   </button>
@@ -866,7 +907,7 @@
     </svg>
     <input type="range" min="20" max="100" value="72" class="opacity-slider" id="opacity-slider" aria-label="Radar opacity">
   </div>
-  <input type="range" min="0" max="11" value="11" class="scrubber" id="scrubber" aria-label="Radar timeline">
+  <input type="range" min="0" value="11" class="scrubber" id="scrubber" aria-label="Radar timeline">
   <div class="time-readout">
     <span id="radar-time">—</span>
     <span class="time-rel" id="radar-rel">now</span>
@@ -958,6 +999,7 @@
   // ===== STATE =====
   let map, radarLayers = [], radarIdx = 11, playing = false, playTimer = null, holdTimer = null;
   let radarOpacity = 0.72;
+  let radarSource = 'iem', radarNowIdx = 11, radarFrameTimes = [], radarManifestCache = null;
   let radarFadeTimer = null;
   let ictLayer = null;
   let activeMarker = null;
@@ -1086,27 +1128,11 @@
     map.getPane('radar').style.zIndex = 250;
     map.getPane('radar').style.pointerEvents = 'none';
 
-    const names = ['nexrad-n0q-m55m','nexrad-n0q-m50m','nexrad-n0q-m45m','nexrad-n0q-m40m','nexrad-n0q-m35m','nexrad-n0q-m30m','nexrad-n0q-m25m','nexrad-n0q-m20m','nexrad-n0q-m15m','nexrad-n0q-m10m','nexrad-n0q-m05m','nexrad-n0q'];
-    radarLayers = names.map((name, idx) => {
-      const layer = L.tileLayer(
-        `https://{s}.agron.iastate.edu/cache/tile.py/1.0.0/${name}/{z}/{x}/{y}.png`,
-        {
-          subdomains: ['mesonet', 'mesonet1', 'mesonet2', 'mesonet3'],
-          tms: false,
-          opacity: idx === 11 ? 0.72 : 0,
-          pane: 'radar',
-          maxZoom: 12
-        }
-      );
-      layer.on('add', () => {
-        if (layer._container) layer._container.style.transition = 'opacity 0.18s ease';
-      });
-      return layer.addTo(map);
-    });
+    initIEMRadar();
 
     // High-resolution single-site ICT (Wichita NEXRAD) overlay above the
     // CONUS mosaic. Native ~250m/pixel vs ~1km mosaic. Renders only on the
-    // 'now' frame (radarIdx === 11). Opacity controlled exclusively by
+    // 'now' frame (radarIdx === radarNowIdx). Opacity controlled exclusively by
     // paintRadar() — single source of truth.
     ictLayer = L.tileLayer(
       'https://{s}.agron.iastate.edu/cache/tile.py/1.0.0/ridge::ICT-N0B-0/{z}/{x}/{y}.png',
@@ -1132,7 +1158,7 @@
     setInterval(() => {
       radarLayers.forEach(l => l.redraw());
       if (ictLayer) ictLayer.redraw();
-      if (radarIdx === 11) updateRadarTime();
+      if (radarIdx === radarNowIdx) updateRadarTime();
     }, 5 * 60 * 1000);
 
     map.on('click', async (e) => {
@@ -1141,6 +1167,9 @@
       await loadWeather(lat, lng);
     });
 
+    document.querySelectorAll('.source-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchRadarSource(btn.dataset.source));
+    });
     document.getElementById('play-btn').addEventListener('click', togglePlay);
     document.getElementById('scrubber').addEventListener('input', (e) => {
       if (playing) togglePlay();
@@ -1160,6 +1189,97 @@
     setTimeout(() => map.flyTo([WICHITA.lat, WICHITA.lon], 7, { duration: 1.6, easeLinearity: 0.3 }), 200);
   }
 
+  function initIEMRadar() {
+    const names = ['nexrad-n0q-m55m','nexrad-n0q-m50m','nexrad-n0q-m45m','nexrad-n0q-m40m','nexrad-n0q-m35m','nexrad-n0q-m30m','nexrad-n0q-m25m','nexrad-n0q-m20m','nexrad-n0q-m15m','nexrad-n0q-m10m','nexrad-n0q-m05m','nexrad-n0q'];
+    radarNowIdx = names.length - 1;
+    radarFrameTimes = Array.from({ length: names.length }, (_, i) => Date.now() - (radarNowIdx - i) * 5 * 60 * 1000);
+    radarLayers = names.map((name, idx) => {
+      const layer = L.tileLayer(
+        `https://{s}.agron.iastate.edu/cache/tile.py/1.0.0/${name}/{z}/{x}/{y}.png`,
+        {
+          subdomains: ['mesonet', 'mesonet1', 'mesonet2', 'mesonet3'],
+          tms: false,
+          opacity: idx === radarNowIdx ? radarOpacity : 0,
+          pane: 'radar',
+          maxZoom: 12
+        }
+      );
+      layer.on('add', () => {
+        if (layer._container) layer._container.style.transition = 'opacity 0.18s ease';
+      });
+      return layer.addTo(map);
+    });
+    document.getElementById('scrubber').max = radarLayers.length - 1;
+  }
+
+  async function initRVRadar() {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    if (!res.ok) throw new Error('rv manifest fetch failed: ' + res.status);
+    radarManifestCache = await res.json();
+    const m = radarManifestCache;
+    const frames = [...m.radar.past, ...m.radar.nowcast];
+    const host = m.host;
+    radarNowIdx = m.radar.past.length - 1;
+    radarFrameTimes = frames.map(f => f.time * 1000);
+    radarLayers = frames.map((frame, idx) => {
+      const layer = L.tileLayer(
+        `${host}${frame.path}/256/{z}/{x}/{y}/4/1_1.png`,
+        {
+          tms: false,
+          opacity: idx === radarNowIdx ? radarOpacity : 0,
+          pane: 'radar',
+          maxZoom: 12
+        }
+      );
+      layer.on('add', () => {
+        if (layer._container) layer._container.style.transition = 'opacity 0.18s ease';
+      });
+      return layer.addTo(map);
+    });
+    document.getElementById('scrubber').max = radarLayers.length - 1;
+  }
+
+  async function switchRadarSource(target) {
+    if (target === radarSource) return;
+    // Stop playback
+    playing = false;
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    document.getElementById('play-icon').innerHTML = '<path d="M3 2 L10 6 L3 10 Z"/>';
+    // Teardown current radar layers (ictLayer stays mounted, paintRadar gates it by source)
+    radarLayers.forEach(l => map.removeLayer(l));
+    radarLayers = [];
+    try {
+      if (target === 'rv') await initRVRadar();
+      else initIEMRadar();
+    } catch (err) {
+      console.error('radar source switch failed:', err);
+      const failBtn = document.querySelector(`.source-btn[data-source="${target}"]`);
+      if (failBtn) {
+        failBtn.classList.add('error');
+        setTimeout(() => failBtn.classList.remove('error'), 1200);
+      }
+      // Rebuild prior source so the page isn't left empty
+      if (radarSource === 'iem') initIEMRadar();
+      else { try { await initRVRadar(); } catch (_) {} }
+      radarIdx = radarNowIdx;
+      document.getElementById('scrubber').value = radarIdx;
+      paintRadar();
+      updateRadarTime();
+      return;
+    }
+    radarSource = target;
+    radarIdx = radarNowIdx;
+    document.getElementById('scrubber').value = radarIdx;
+    document.querySelectorAll('.source-btn').forEach(b => {
+      const active = b.dataset.source === target;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    paintRadar();
+    updateRadarTime();
+  }
+
   // Centralized radar paint — call from every state change. Cancels any pending
   // fade timer so toggle-off mid-fade can't leave a layer at non-zero opacity.
   function paintRadar(crossfadeFrom) {
@@ -1173,7 +1293,7 @@
 
     // Radar ON
     radarLayers[radarIdx].setOpacity(radarOpacity);
-    if (ictLayer) ictLayer.setOpacity(radarIdx === 11 ? radarOpacity : 0);
+    if (ictLayer) ictLayer.setOpacity(radarSource === 'iem' && radarIdx === radarNowIdx ? radarOpacity : 0);
     if (crossfadeFrom != null && crossfadeFrom !== radarIdx) {
       // Brief overlap, then fade out everything except current
       radarFadeTimer = setTimeout(() => {
@@ -1184,12 +1304,12 @@
           return;
         }
         radarLayers.forEach((l, i) => { if (i !== radarIdx) l.setOpacity(0); });
-        if (ictLayer) ictLayer.setOpacity(radarIdx === 11 ? radarOpacity : 0);
+        if (ictLayer) ictLayer.setOpacity(radarSource === 'iem' && radarIdx === radarNowIdx ? radarOpacity : 0);
       }, 120);
     } else {
       // Snap-paint: ensure only current is visible
       radarLayers.forEach((l, i) => { if (i !== radarIdx) l.setOpacity(0); });
-      if (ictLayer) ictLayer.setOpacity(radarIdx === 11 ? radarOpacity : 0);
+      if (ictLayer) ictLayer.setOpacity(radarSource === 'iem' && radarIdx === radarNowIdx ? radarOpacity : 0);
     }
   }
 
@@ -1203,12 +1323,26 @@
   }
 
   function updateRadarTime() {
-    const offsetMin = (11 - radarIdx) * 5;
-    const t = new Date(Date.now() - offsetMin * 60 * 1000);
+    if (radarSource === 'iem') {
+      radarFrameTimes = Array.from({ length: radarLayers.length }, (_, i) => Date.now() - (radarNowIdx - i) * 5 * 60 * 1000);
+    }
+    const t = new Date(radarFrameTimes[radarIdx]);
     t.setMinutes(Math.floor(t.getMinutes() / 5) * 5, 0, 0);
     const label = t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ }).toLowerCase().replace(' ', '');
-    document.getElementById('radar-time').textContent = label;
-    document.getElementById('radar-rel').textContent = offsetMin === 0 ? 'now' : `−${offsetMin}m`;
+    const offsetMin = Math.round((radarFrameTimes[radarNowIdx] - radarFrameTimes[radarIdx]) / 60000);
+    let timeText = label;
+    let relText;
+    if (offsetMin === 0) {
+      relText = 'now';
+    } else if (radarSource === 'rv' && radarIdx > radarNowIdx) {
+      const aheadMin = -offsetMin;
+      timeText = `${label} (+${aheadMin}m)`;
+      relText = `+${aheadMin}m`;
+    } else {
+      relText = `−${offsetMin}m`;
+    }
+    document.getElementById('radar-time').textContent = timeText;
+    document.getElementById('radar-rel').textContent = relText;
   }
 
   function togglePlay() {
@@ -1222,9 +1356,9 @@
 
   function tick() {
     playTimer = setInterval(() => {
-      const next = (radarIdx + 1) % 12;
+      const next = (radarIdx + 1) % radarLayers.length;
       setActive(next);
-      if (next === 11) {
+      if (next === radarNowIdx) {
         clearInterval(playTimer);
         holdTimer = setTimeout(() => { if (playing) tick(); }, 900);
       }
